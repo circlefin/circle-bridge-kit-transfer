@@ -2,6 +2,9 @@
 
 This sample app demonstrates how to use Circle's [Bridge Kit](https://www.npmjs.com/package/@circle-fin/bridge-kit) to transfer USDC across chains with a wallet-connect experience for both EVM and Solana testnets.
 
+<img width="830" height="538" alt="screenshot2" src="https://github.com/user-attachments/assets/9a4589b6-2d1f-4a41-9c23-a96aafc12da0" />
+
+
 ## Prerequisites
 
 - Node.js 18+ (recommended LTS) and npm
