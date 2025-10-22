@@ -92,4 +92,4 @@ See `SECURITY.md` for vulnerability reporting guidelines. Please report issues p
 
 ## License
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/circlefin/circle-multi-currency-wallet/blob/master/LICENSE)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/circlefin/circle-bridge-kit-transfer/blob/master/LICENSE)
