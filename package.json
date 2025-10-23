@@ -8,7 +8,8 @@
     "dev:server": "tsx watch api/server.ts",
     "dev:client": "vite",
     "build": "vite build && tsc --noEmit",
-    "preview": "tsx api/server.ts"
+    "preview": "tsx api/server.ts",
+    "lint": "eslint . --ext .js,.ts,.tsx,.mjs"
   },
   "dependencies": {
     "@circle-fin/adapter-solana": "^1.0.0",
