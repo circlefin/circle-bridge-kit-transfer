@@ -15,15 +15,15 @@ This sample app demonstrates how to use Circle's [Bridge Kit](https://www.npmjs.
 
 1. Install dependencies:
 
-```bash
-npm install
-```
+    ```bash
+    npm install
+    ```
 
 2. Start the app in development:
 
-```bash
-npm run dev
-```
+    ```bash
+    npm run dev
+    ```
 
 This runs both:
 - Client (Vite) on `http://localhost:5173`
@@ -33,17 +33,17 @@ The Vite dev server proxies `/api` to the preview server per `vite.config.ts`.
 
 3. Build for production:
 
-```bash
-npm run build
-```
+    ```bash
+    npm run build
+    ```
 
 Outputs static assets to `dist/` and type-checks the project.
 
 4. Preview the production build locally:
 
-```bash
-npm run preview
-```
+    ```bash
+    npm run preview
+    ```
 
 Serves `dist/` using the Hono server on `http://localhost:8787`.
 

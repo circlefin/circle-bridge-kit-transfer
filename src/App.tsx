@@ -1,21 +1,3 @@
-/**
- * Copyright 2025 Circle Internet Group, Inc.  All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { useState, useEffect } from "react";
 import { BridgeKit } from "@circle-fin/bridge-kit";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -187,28 +169,28 @@ export default function App() {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
       <>
-        <SiteHeader title="Circle Bridging Kit" />
+        <SiteHeader title="Circle Bridge Kit" />
         <main className="flex flex-1 flex-col items-center p-4 pt-6">
           <p className="text-sm text-muted-foreground italic max-w-xl mb-4">
             If you run into issues with conflicting wallet connection with multiple active wallets, try disabling the
             other wallets.
           </p>
-          <div className="flex gap-4 mb-4">
-            <ConnectButton label="Connect EVM wallet" chainStatus="none" accountStatus="address" showBalance={false} />
+          <div className="grid grid-cols-2 mb-4 justify-items-center">
+            <ConnectButton label="Connect EVM Wallet" chainStatus="none" accountStatus="address" showBalance={false} />
             {solAddress ? (
-              <div className="flex flex-col items-center gap-2">
-                <Button onClick={disconnectSol} variant="outline">
+              <>
+                <Button onClick={disconnectSol} size="lg" style={{ fontWeight: 700, fontSize: "1em" }} variant="outline" className="bg-white">
                   Disconnect Solana Wallet
                 </Button>
                 <p
-                  className="text-xs text-muted-foreground cursor-pointer hover:underline"
+                  className="col-start-2 text-xs text-muted-foreground cursor-pointer hover:underline mt-2"
                   onClick={() => navigator.clipboard.writeText(solAddress)}
                 >
                   {solAddress.slice(0, 6)}…{solAddress.slice(-6)} (click to copy)
                 </p>
-              </div>
+              </>
             ) : (
-              <Button onClick={handleSolConnect} size="lg">
+              <Button onClick={handleSolConnect} size="lg" style={{ fontWeight: 700, fontSize: "1em" }}>
                 Connect Solana Wallet
               </Button>
             )}
@@ -220,7 +202,7 @@ export default function App() {
           )}
           <Card className="w-full max-w-xl mt-4">
             <CardHeader>
-              <CardTitle className="text-center">Cross-Chain USDC Transfer</CardTitle>
+              <CardTitle className="text-center">Crosschain USDC Transfer</CardTitle>
             </CardHeader>
             <CardContent>
               <form className="space-y-6 mb-6">
