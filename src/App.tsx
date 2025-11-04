@@ -32,6 +32,8 @@ export default function App() {
 
   const [success, setSuccess] = useState(false);
   const [successAmount, setSuccessAmount] = useState<string | null>(null);
+  const [successSourceChain, setSuccessSourceChain] = useState<string | null>(null);
+  const [successDestinationChain, setSuccessDestinationChain] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
   const { bridge, isLoading, error, clear } = useBridge();
@@ -137,6 +139,8 @@ export default function App() {
       if (res?.ok && !hasErrorStep && result?.state === "success") {
         setSuccess(true);
         setSuccessAmount(amount);
+        setSuccessSourceChain(sourceChain);
+        setSuccessDestinationChain(destinationChain);
         await sourceBalance.refresh();
         setAmount("");
       } else {
@@ -161,6 +165,8 @@ export default function App() {
     setAmount("0");
     setSuccess(false);
     setSuccessAmount(null);
+    setSuccessSourceChain(null);
+    setSuccessDestinationChain(null);
     setFailed(false);
     setSourceChain("Ethereum_Sepolia");
     setDestinationChain("");
@@ -202,7 +208,7 @@ export default function App() {
           )}
           <Card className="w-full max-w-xl mt-4">
             <CardHeader>
-              <CardTitle className="text-center">Crosschain USDC Transfer</CardTitle>
+              <CardTitle className="text-center">Cross-Chain USDC Transfer</CardTitle>
             </CardHeader>
             <CardContent>
               <form className="space-y-6 mb-6">
@@ -288,16 +294,18 @@ export default function App() {
                   </p>
                 </Field>
 
-                {success && (
+                {success && successSourceChain && successDestinationChain && (
                   <p className="text-sm rounded border px-3 py-2 border-success-foreground bg-success">
                     Successfully bridged{" "}
                     <span className="font-semibold">
-                      {Number(successAmount ?? 0).toLocaleString(undefined, {
-                        maximumFractionDigits: 1,
-                      })}
+                      {Number(successAmount ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </span>{" "}
-                    USDC from <span className="font-semibold">{chainNames[sourceChain] ?? sourceChain}</span> to{" "}
-                    <span className="font-semibold">{chainNames[destinationChain] ?? destinationChain}</span>.
+                    USDC from{" "}
+                    <span className="font-semibold">{chainNames[successSourceChain] ?? successSourceChain}</span> to{" "}
+                    <span className="font-semibold">
+                      {chainNames[successDestinationChain] ?? successDestinationChain}
+                    </span>
+                    .
                   </p>
                 )}
 
