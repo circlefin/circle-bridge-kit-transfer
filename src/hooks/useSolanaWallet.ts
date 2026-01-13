@@ -17,7 +17,10 @@
  */
 
 import { useState } from "react";
-import { createAdapterFromProvider as createSolFromProvider } from "@circle-fin/adapter-solana";
+import {
+  createSolanaAdapterFromProvider,
+  type SolanaAdapter,
+} from "@circle-fin/adapter-solana";
 
 declare global {
   interface Window {
@@ -26,8 +29,9 @@ declare global {
 }
 
 export function useSolanaWallet() {
-  const [adapter, setAdapter] = useState<any | null>(null);
+  const [adapter, setAdapter] = useState<SolanaAdapter | null>(null);
   const [address, setAddress] = useState<string | null>(null);
+  const hasWallet = !!window.solana;
 
   async function connect() {
     const provider = window.solana;
@@ -38,7 +42,7 @@ export function useSolanaWallet() {
       provider?.publicKey?.toBase58?.() || res?.publicKey?.toBase58?.();
     if (!pubkey) throw new Error("No public key returned");
 
-    setAdapter(await createSolFromProvider({ provider }));
+    setAdapter(await createSolanaAdapterFromProvider({ provider }));
     setAddress(pubkey);
   }
 
@@ -51,5 +55,5 @@ export function useSolanaWallet() {
     }
   }
 
-  return { adapter, address, connect, disconnect };
+  return { adapter, address, connect, disconnect, hasWallet };
 }

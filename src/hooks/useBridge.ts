@@ -17,7 +17,9 @@
  */
 
 import { useState } from "react";
-import { BridgeKit } from "@circle-fin/bridge-kit";
+import { BridgeKit, type BridgeResult } from "@circle-fin/bridge-kit";
+import type { ViemAdapter } from "@circle-fin/adapter-viem-v2";
+import type { SolanaAdapter } from "@circle-fin/adapter-solana";
 
 export type SupportedChain = string;
 
@@ -25,14 +27,14 @@ export interface BridgeParams {
   fromChain: SupportedChain;
   toChain: SupportedChain;
   amount: string;
-  fromAdapter: any;
-  toAdapter: any;
+  fromAdapter: ViemAdapter | SolanaAdapter;
+  toAdapter: ViemAdapter | SolanaAdapter;
 }
 
 export function useBridge() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<BridgeResult | null>(null);
 
   function clear() {
     setError(null);
@@ -40,7 +42,10 @@ export function useBridge() {
     setIsLoading(false);
   }
 
-  async function bridge(params: BridgeParams, options?: { onEvent?: (evt: any) => void }) {
+  async function bridge(
+    params: BridgeParams,
+    options?: { onEvent?: (evt: Record<string, unknown>) => void }
+  ) {
     setIsLoading(true);
     setError(null);
     setData(null);
@@ -73,5 +78,37 @@ export function useBridge() {
     }
   }
 
-  return { bridge, isLoading, error, data, clear };
+  async function retry(
+    failedResult: BridgeResult,
+    params: BridgeParams,
+    options?: { onEvent?: (evt: Record<string, unknown>) => void }
+  ) {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const kit = new BridgeKit();
+      const handler = (payload: any) => options?.onEvent?.(payload);
+      kit.on("*", handler);
+
+      try {
+        const result = await kit.retry(failedResult, {
+          from: params.fromAdapter,
+          to: params.toAdapter,
+        });
+
+        setData(result);
+        return { ok: true, data: result };
+      } finally {
+        kit.off("*", handler);
+      }
+    } catch (error: any) {
+      setError(error?.message ?? "Retry failed");
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return { bridge, retry, isLoading, error, data, clear };
 }
