@@ -18,12 +18,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAccount, useConnectorClient } from "wagmi";
-import { createAdapterFromProvider } from "@circle-fin/adapter-viem-v2";
+import {
+  createViemAdapterFromProvider,
+  type ViemAdapter,
+} from "@circle-fin/adapter-viem-v2";
 
 export function useEvmAdapter() {
   const { address } = useAccount();
   const { data: client } = useConnectorClient();
-  const [adapter, setAdapter] = useState<any | null>(null);
+  const [adapter, setAdapter] = useState<ViemAdapter | null>(null);
 
   const lastProviderRef = useRef<any>(null);
   const lastAddressRef = useRef<string | null>(null);
@@ -35,8 +38,7 @@ export function useEvmAdapter() {
     const eth = (globalThis as any)?.ethereum;
     if (!eth) return null;
     if (Array.isArray(eth.providers) && eth.providers.length > 0) {
-      const phantom = eth.providers.find((provider: any) => provider?.isPhantom);
-      return phantom ?? eth.providers[0];
+      return eth.providers[0];
     }
     return eth;
   }
@@ -44,8 +46,8 @@ export function useEvmAdapter() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const provider = pickProvider();
-      if (!provider || !address) {
+      // Don't check for provider until we have an address (wallet connected)
+      if (!address) {
         if (!cancelled) {
           setAdapter(null);
           lastProviderRef.current = null;
@@ -53,9 +55,20 @@ export function useEvmAdapter() {
         }
         return;
       }
+
+      const provider = pickProvider();
+      if (!provider) {
+        if (!cancelled) {
+          setAdapter(null);
+          lastProviderRef.current = null;
+          lastAddressRef.current = null;
+        }
+        return;
+      }
+
       const providerChanged = provider !== lastProviderRef.current;
       if (providerChanged) {
-        const adapter = await createAdapterFromProvider({ provider });
+        const adapter = await createViemAdapterFromProvider({ provider });
         if (!cancelled) {
           setAdapter(adapter);
           lastProviderRef.current = provider;

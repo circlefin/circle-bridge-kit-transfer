@@ -6,7 +6,7 @@ This sample app demonstrates how to use Circle's [Bridge Kit](https://www.npmjs.
 
 ## Prerequisites
 
-- Node.js 18+ (recommended LTS) and npm
+- Node.js 24+ (recommended LTS) and npm
 - An EVM wallet (e.g., MetaMask) and a Solana wallet (e.g., Phantom)
 - Testnet USDC on the relevant chains and native tokens for gas fees
 
@@ -85,7 +85,13 @@ Serves `dist/` using the Hono server on `http://localhost:8787`.
 - `npm run build`: Build static assets and run type-checking
 - `npm run preview`: Serve `dist/` via Hono server
 
-## Security
+## Security & Usage Model
+
+This sample application:
+- Assumes testnet or sandbox usage only
+- Does not store private keys in plaintext
+- Uses environment variables for secrets
+- Is not intended for production use without modification
 
 See `SECURITY.md` for vulnerability reporting guidelines. Please report issues privately via Circle's bug bounty program.
 

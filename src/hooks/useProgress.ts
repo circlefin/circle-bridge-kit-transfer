@@ -35,8 +35,8 @@ export function useProgress() {
   const [currentStep, setCurrentStep] = useState<StepKey>("idle");
   const [logs, setLogs] = useState<string[]>([]);
 
-  function addLog(line: string) {
-    setLogs((prev) => [...prev, `[${now()}] ${line}`]);
+  function addLog(line: string, includeTimestamp = true) {
+    setLogs((prev) => [...prev, includeTimestamp ? `[${now()}] ${line}` : line]);
   }
 
   function reset() {

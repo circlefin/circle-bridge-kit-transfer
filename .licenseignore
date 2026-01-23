@@ -1,2 +1,4 @@
 pkg:npm/rollup
 pkg:npm/vite
+pkg:npm/bowser
+pkg:npm/lucide-react

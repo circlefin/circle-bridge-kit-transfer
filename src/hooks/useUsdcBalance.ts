@@ -19,11 +19,13 @@
 import { useEffect, useState } from "react";
 import type { SupportedChain } from "@/hooks/useBridge";
 import { formatUnits } from "viem";
+import type { SolanaAdapter } from "@circle-fin/adapter-solana";
+import type { ViemAdapter } from "@circle-fin/adapter-viem-v2";
 
 type Params = {
-  solAdapter?: any | null;
+  solAdapter?: SolanaAdapter | null;
   solAddress?: string | null;
-  evmAdapter?: any | null;
+  evmAdapter?: ViemAdapter | null;
   evmAddress?: string | null;
 };
 
@@ -40,22 +42,20 @@ export function useUsdcBalance(
     setLoading(true);
     try {
       if (isSolana(chain) && solAdapter && solAddress) {
-        const action = await solAdapter.prepareAction(
-          "usdc.balanceOf",
-          {},
-          { chain: chain as any, address: solAddress } as any
-        );
+        const action = await solAdapter.prepareAction("usdc.balanceOf", {}, {
+          chain: chain as any,
+          address: solAddress,
+        } as any);
         const raw = await action.execute();
         setBalance(formatUnits(BigInt(raw), 6));
         return;
       }
 
       if (!isSolana(chain) && evmAdapter && evmAddress) {
-        const action = await evmAdapter.prepareAction(
-          "usdc.balanceOf",
-          {},
-          { chain: chain as any, address: evmAddress } as any
-        );
+        const action = await evmAdapter.prepareAction("usdc.balanceOf", {}, {
+          chain: chain as any,
+          address: evmAddress,
+        } as any);
         const raw = await action.execute();
         setBalance(formatUnits(BigInt(raw), 6));
         return;

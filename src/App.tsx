@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { BridgeKit } from "@circle-fin/bridge-kit";
+import { BridgeKit, type ChainDefinition, KitError } from "@circle-fin/bridge-kit";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SiteHeader } from "@/components/app/site-header";
 import { ProgressSteps } from "@/components/app/progress-step";
@@ -10,6 +10,7 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { ArrowLeftRight } from "lucide-react";
 import { formatBalance } from "@/lib/utils";
 
@@ -25,10 +26,12 @@ import { useEvmAdapter } from "@/hooks/useEvmAdapter";
 import type { SupportedChain } from "@/hooks/useBridge";
 
 export default function App() {
-  const [chains, setChains] = useState<any[]>([]);
-  const [sourceChain, setSourceChain] = useState<SupportedChain>("Ethereum_Sepolia");
+  const [chains, setChains] = useState<ChainDefinition[]>([]);
+  const [sourceChain, setSourceChain] = useState<SupportedChain>("Arc_Testnet");
   const [destinationChain, setDestinationChain] = useState<SupportedChain>("");
   const [amount, setAmount] = useState<string>("0");
+  const [useDifferentAddress, setUseDifferentAddress] = useState<boolean>(false);
+  const [recipientAddress, setRecipientAddress] = useState<string>("");
 
   const [success, setSuccess] = useState(false);
   const [successAmount, setSuccessAmount] = useState<string | null>(null);
@@ -36,7 +39,7 @@ export default function App() {
   const [successDestinationChain, setSuccessDestinationChain] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
-  const { bridge, isLoading, error, clear } = useBridge();
+  const { bridge, retry, estimate, isLoading, error, isEstimating, clear } = useBridge();
   const { currentStep, logs, addLog, handleEvent, setCurrentStep, reset } = useProgress();
 
   const {
@@ -44,6 +47,7 @@ export default function App() {
     address: solAddress,
     connect: connectSol,
     disconnect: disconnectSol,
+    hasWallet: hasSolanaWallet,
   } = useSolanaWallet();
   const { evmAdapter, evmAddress } = useEvmAdapter();
 
@@ -56,10 +60,10 @@ export default function App() {
       try {
         const kit = new BridgeKit();
         const allChains = await kit.getSupportedChains();
-        const testnets = allChains.filter((chain: any) => chain.isTestnet === true);
+        const testnets = allChains.filter((chain) => chain.isTestnet === true);
         if (!cancelled) setChains(testnets);
       } catch (error) {
-        console.error("[chains] failed to load (client)", error);
+        console.error("Failed to load chains", error);
       }
     })();
     return () => {
@@ -74,20 +78,36 @@ export default function App() {
     setDestinationChain(sourceChain);
   };
 
-  const sourceBalance = useUsdcBalance(sourceChain, { solAdapter, solAddress, evmAdapter, evmAddress });
+  const sourceBalance = useUsdcBalance(sourceChain, {
+    solAdapter,
+    solAddress,
+    evmAdapter,
+    evmAddress,
+  });
 
   async function handleSolConnect() {
     try {
       await connectSol();
       await sourceBalance.refresh();
     } catch (error) {
-      console.error("[SOL connect] failed:", error);
+      console.error("Failed to connect Solana wallet", error);
     }
   }
 
   const { switchChainAsync } = useSwitchChain();
 
   const isSol = (chain: string) => chain.toLowerCase().includes("solana");
+
+  const getAdapters = () => {
+    const fromAdapter = isSol(sourceChain) ? solAdapter : evmAdapter;
+    const toAdapter = isSol(destinationChain) ? solAdapter : evmAdapter;
+
+    if (!fromAdapter || !toAdapter) {
+      throw new Error("Wallet adapters not initialized. Please connect both wallets.");
+    }
+
+    return { fromAdapter, toAdapter };
+  };
 
   const onSubmit = async () => {
     if (!amount || Number(amount) <= 0) return;
@@ -100,43 +120,54 @@ export default function App() {
 
     try {
       const destination = chains.find((item) => item.chain === destinationChain);
-      if (destination && !isSol(destination.chain)) {
+
+      // Auto-switch to destination network if it's an EVM chain
+      const destChainId =
+        destination && !isSol(destination.chain) && "chainId" in destination ? destination.chainId : undefined;
+
+      if (destChainId) {
         try {
-          await switchChainAsync({ chainId: destination.chainId });
+          await switchChainAsync({ chainId: destChainId });
         } catch (error) {
-          console.warn("[wallet] user rejected network switch", error);
+          console.warn("User rejected network switch", error);
           return;
         }
       }
 
-      const onBridgeEvent = async (evt: any) => {
+      const onBridgeEvent = async (evt: Record<string, unknown>) => {
         handleEvent(evt);
-        const dest = destination ?? chains.find((c) => c.chain === destinationChain);
-        const destId = dest?.chainId;
-        if (destId && evt?.method === "mint" && evt?.values?.state !== "success" && evt?.values?.state !== "error") {
+
+        // Auto-switch to destination network when mint step starts
+        const values = evt.values as { state?: string } | undefined;
+
+        if (destChainId && evt.method === "mint" && values?.state === "pending") {
           try {
-            await switchChainAsync({ chainId: destId });
-          } catch (error: any) {
-            console.warn("[wallet switch] unexpected error", error);
+            await switchChainAsync({ chainId: destChainId });
+          } catch (error: unknown) {
+            console.warn("Unexpected error switching network", error);
           }
         }
       };
 
-      const res = await bridge(
+      const { fromAdapter, toAdapter } = getAdapters();
+
+      const response = await bridge(
         {
           fromChain: sourceChain,
           toChain: destinationChain,
           amount,
-          fromAdapter: isSol(sourceChain) ? solAdapter : evmAdapter,
-          toAdapter: isSol(destinationChain) ? solAdapter : evmAdapter,
+          recipientAddress: useDifferentAddress ? recipientAddress : undefined,
+          fromAdapter,
+          toAdapter,
         },
         { onEvent: onBridgeEvent }
       );
 
-      const result = typeof res?.data === "string" ? JSON.parse(res.data) : res?.data;
-      const hasErrorStep = Array.isArray(result?.steps) && result.steps.some((step: any) => step?.state === "error");
+      if (!response) return;
 
-      if (res?.ok && !hasErrorStep && result?.state === "success") {
+      const hasErrorStep = response.data.steps.some((step) => step.state === "error");
+
+      if (response.ok && !hasErrorStep && response.data.state === "success") {
         setSuccess(true);
         setSuccessAmount(amount);
         setSuccessSourceChain(sourceChain);
@@ -144,31 +175,123 @@ export default function App() {
         await sourceBalance.refresh();
         setAmount("");
       } else {
-        const stepErr = Array.isArray(result?.steps)
-          ? result!.steps.find((step: any) => step?.state === "error")
-          : undefined;
-        throw new Error(stepErr?.errorMessage || "Bridge failed");
+        const errorStep = response.data.steps.find((step) => step.state === "error");
+        const error = errorStep?.error;
+        const isRecoverableError =
+          error instanceof KitError && (error.recoverability === "RETRYABLE" || error.recoverability === "RESUMABLE");
+
+        if (isRecoverableError && errorStep?.name === "mint") {
+          addLog(`${errorStep.name} step failed: ${errorStep.errorMessage}`);
+          addLog("Retrying transfer...");
+
+          try {
+            const retryRes = await retry(
+              response.data,
+              {
+                fromChain: sourceChain,
+                toChain: destinationChain,
+                amount,
+                fromAdapter,
+                toAdapter,
+              },
+              { onEvent: onBridgeEvent }
+            );
+
+            if (!retryRes) {
+              throw new Error("Retry returned no result");
+            }
+
+            if (retryRes.ok && retryRes.data.state === "success") {
+              setSuccess(true);
+              setSuccessAmount(amount);
+              setSuccessSourceChain(sourceChain);
+              setSuccessDestinationChain(destinationChain);
+              await sourceBalance.refresh();
+              setAmount("");
+              addLog("Transfer completed successfully after retry");
+              return;
+            }
+          } catch (retryError) {
+            console.error("Retry error", retryError);
+            const retryMsg = retryError instanceof Error ? retryError.message : "Retry failed";
+            addLog(`Retry failed: ${retryMsg}`);
+          }
+        }
+
+        throw new Error(errorStep?.errorMessage || "Bridge failed");
       }
     } catch (error) {
-      console.error("[bridge error]", error);
+      console.error("Bridge error", error);
       setFailed(true);
-      const msg = error instanceof Error ? error.message : typeof error === "string" ? error : JSON.stringify(error);
+      const msg = error instanceof Error ? error.message : "Bridge operation failed";
       addLog(`Error: ${msg}`);
+    }
+  };
+
+  const onEstimate = async () => {
+    if (!amount || Number(amount) <= 0) return;
+
+    try {
+      const { fromAdapter, toAdapter } = getAdapters();
+
+      const result = await estimate({
+        fromChain: sourceChain,
+        toChain: destinationChain,
+        amount,
+        recipientAddress: useDifferentAddress ? recipientAddress : undefined,
+        fromAdapter,
+        toAdapter,
+      });
+
+      if (result?.ok && result.data) {
+        const estimate = result.data;
+        addLog(
+          `Estimating ${estimate.amount} ${estimate.token} from ${estimate.source.chain} to ${estimate.destination.chain}`,
+          false
+        );
+
+        addLog("Gas Fees:", false);
+        if (estimate.gasFees && estimate.gasFees.length > 0) {
+          estimate.gasFees.forEach((fee) => {
+            addLog(`  ${fee.name} (${fee.blockchain}): ${fee.fees?.fee || "N/A"} ${fee.token}`, false);
+          });
+        } else {
+          addLog("  No gas fees found", false);
+        }
+
+        addLog("Other Fees:", false);
+        if (estimate.fees && estimate.fees.length > 0) {
+          estimate.fees.forEach((fee) => {
+            addLog(`  ${fee.type}: ${fee.amount || "Free"} ${fee.token}`, false);
+          });
+        } else {
+          addLog("  No service fees found", false);
+        }
+      }
+    } catch (error) {
+      console.error("Estimate error", error);
+      const msg = error instanceof Error ? error.message : "Estimate failed";
+      addLog(`Estimate error: ${msg}`, false);
     }
   };
 
   const showReset = success || failed || !!error;
 
+  const isFormDisabled =
+    sourceBalance.loading || Number(amount) <= 0 || Number(amount) > Number(sourceBalance.balance || 0);
+
   const resetAll = async () => {
     reset();
     clear?.();
     setAmount("0");
+    setUseDifferentAddress(false);
+    setRecipientAddress("");
     setSuccess(false);
     setSuccessAmount(null);
     setSuccessSourceChain(null);
     setSuccessDestinationChain(null);
     setFailed(false);
-    setSourceChain("Ethereum_Sepolia");
+    setSourceChain("Arc_Testnet");
     setDestinationChain("");
   };
 
@@ -176,16 +299,22 @@ export default function App() {
     <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
       <>
         <SiteHeader title="Circle Bridge Kit" />
-        <main className="flex flex-1 flex-col items-center p-4 pt-6">
+        <main className="flex flex-1 flex-col items-center p-4">
           <p className="text-sm text-muted-foreground italic max-w-xl mb-4">
-            If you run into issues with conflicting wallet connection with multiple active wallets, try disabling the
-            other wallets.
+            Ideally, you should only have one active EVM wallet and one active Solana wallet on your browser. Multiple
+            active EVM wallets may result in unexpected behavior.
           </p>
-          <div className="grid grid-cols-2 mb-4 justify-items-center">
+          <div className="grid grid-cols-2 justify-items-center">
             <ConnectButton label="Connect EVM Wallet" chainStatus="none" accountStatus="address" showBalance={false} />
             {solAddress ? (
               <>
-                <Button onClick={disconnectSol} size="lg" style={{ fontWeight: 700, fontSize: "1em" }} variant="outline" className="bg-white">
+                <Button
+                  onClick={disconnectSol}
+                  size="lg"
+                  style={{ fontWeight: 700, fontSize: "1em" }}
+                  variant="outline"
+                  className="bg-white"
+                >
                   Disconnect Solana Wallet
                 </Button>
                 <p
@@ -195,6 +324,33 @@ export default function App() {
                   {solAddress.slice(0, 6)}…{solAddress.slice(-6)} (click to copy)
                 </p>
               </>
+            ) : !hasSolanaWallet ? (
+              <div className="flex flex-col items-center gap-2">
+                <Button disabled size="lg" style={{ fontWeight: 700, fontSize: "1em" }} variant="outline">
+                  No Solana Wallet Detected
+                </Button>
+                <p className="text-xs text-muted-foreground text-center max-w-[200px]">
+                  Install{" "}
+                  <a
+                    href="https://phantom.app/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-foreground"
+                  >
+                    Phantom
+                  </a>
+                  ,{" "}
+                  <a
+                    href="https://solflare.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-foreground"
+                  >
+                    Solflare
+                  </a>
+                  , or another Solana wallet
+                </p>
+              </div>
             ) : (
               <Button onClick={handleSolConnect} size="lg" style={{ fontWeight: 700, fontSize: "1em" }}>
                 Connect Solana Wallet
@@ -202,7 +358,7 @@ export default function App() {
             )}
           </div>
           {(evmAddress || solAddress) && (
-            <p className="text-sm text-muted-foreground italic max-w-xl">
+            <p className="text-sm text-muted-foreground italic max-w-xl mt-3">
               For reliability, it’s best to disconnect directly from your wallet UI after use.
             </p>
           )}
@@ -211,7 +367,7 @@ export default function App() {
               <CardTitle className="text-center">Cross-Chain USDC Transfer</CardTitle>
             </CardHeader>
             <CardContent>
-              <form className="space-y-6 mb-6">
+              <form className="space-y-6">
                 <div className="flex justify-between gap-4 items-center">
                   <Field className="flex-[1_0_0]">
                     <FieldLabel htmlFor="sourceChain">Source Chain</FieldLabel>
@@ -224,7 +380,7 @@ export default function App() {
                         <SelectValue placeholder="Select source chain" />
                       </SelectTrigger>
                       <SelectContent>
-                        {chains.map((item: any) => {
+                        {chains.map((item) => {
                           const isSol = item.chain.toLowerCase().includes("solana");
                           const isEvm = !isSol;
                           const isUnavailable =
@@ -257,7 +413,7 @@ export default function App() {
                         <SelectValue placeholder="Select destination chain" />
                       </SelectTrigger>
                       <SelectContent>
-                        {chains.map((item: any) => {
+                        {chains.map((item) => {
                           const isSol = item.chain.toLowerCase().includes("solana");
                           const isEvm = !isSol;
                           const isUnavailable =
@@ -294,11 +450,36 @@ export default function App() {
                   </p>
                 </Field>
 
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="recipientSwitch"
+                    checked={useDifferentAddress}
+                    onCheckedChange={setUseDifferentAddress}
+                    thumbClassName="!bg-white dark:data-[state=unchecked]:!bg-foreground dark:data-[state=checked]:!bg-primary-foreground"
+                  />
+                  <FieldLabel htmlFor="recipientSwitch">Use different recipient address</FieldLabel>
+                </div>
+
+                {useDifferentAddress && (
+                  <Field>
+                    <FieldLabel htmlFor="recipientAddress">Recipient Address</FieldLabel>
+                    <Input
+                      id="recipientAddress"
+                      type="text"
+                      value={recipientAddress}
+                      onChange={(evt) => setRecipientAddress(evt.target.value)}
+                      placeholder="Enter recipient address"
+                    />
+                  </Field>
+                )}
+
                 {success && successSourceChain && successDestinationChain && (
                   <p className="text-sm rounded border px-3 py-2 border-success-foreground bg-success">
                     Successfully bridged{" "}
                     <span className="font-semibold">
-                      {Number(successAmount ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      {Number(successAmount ?? 0).toLocaleString(undefined, {
+                        maximumFractionDigits: 2,
+                      })}
                     </span>{" "}
                     USDC from{" "}
                     <span className="font-semibold">{chainNames[successSourceChain] ?? successSourceChain}</span> to{" "}
@@ -315,14 +496,14 @@ export default function App() {
                 <div className="flex justify-center gap-2">
                   <Button
                     type="button"
-                    onClick={onSubmit}
-                    disabled={
-                      isLoading ||
-                      sourceBalance.loading ||
-                      Number(amount) <= 0 ||
-                      Number(amount) > Number(sourceBalance.balance || 0)
-                    }
+                    variant="outline"
+                    onClick={onEstimate}
+                    disabled={isEstimating || isLoading || isFormDisabled}
                   >
+                    {isEstimating ? "Estimating…" : "Estimate"}
+                  </Button>
+
+                  <Button type="button" onClick={onSubmit} disabled={isLoading || isFormDisabled}>
                     {isLoading ? "Bridging…" : "Bridge"}
                   </Button>
 
