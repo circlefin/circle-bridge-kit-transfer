@@ -67,17 +67,20 @@ export function useEvmAdapter() {
       }
 
       const providerChanged = provider !== lastProviderRef.current;
-      if (providerChanged) {
+      const addressChanged = address !== lastAddressRef.current;
+      if (providerChanged || addressChanged) {
         const adapter = await createViemAdapterFromProvider({ provider });
         if (!cancelled) {
           setAdapter(adapter);
           lastProviderRef.current = provider;
+          lastAddressRef.current = address;
         }
       }
-      if (!cancelled) {
-        lastAddressRef.current = address;
-      }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [client, address]);
 
   return { evmAdapter: adapter, evmAddress: address ?? null };
